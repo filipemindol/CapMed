@@ -1,0 +1,72 @@
+
+
+def train(dataset_path, tokenizer, num_epochs=5):
+    """function to train the model in model.py
+    Args:
+        dataset_path (str): path to train dataset
+    """
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    data = load_dataset(dataset_path)  # load dataset
+    images = data['images']
+    captions = data['captions']
+    dataset = RadiologyDataset(images=images, captions=captions, transform=transform)  # apply preprocess of images
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=True, num_workers=0)  # create a data loader
+    model = Model().to(device)
+    gpt_model = AutoModel.from_pretrained('gpt2').to(device)
+    # import model in model.py
+    optimizer = optim.Adam(model.mapping.parameters(), lr=1e-4)  # only train mapping network parameters
+    loss_history = []
+    #wandb.login(key='4391d9f95380fafdeba7f39c09289a6b5824a488')
+    #wandb.init(project='Capmed', entity='magda_amorim')
+    for epoch in range(num_epochs):
+        model.train()
+        total_loss = 0
+        epoch_loss = []
+        
+        progress_bar = tqdm(dataloader, desc=f'Epoch {epoch + 1}/{num_epochs}', leave=False)
+        
+        for images, captions in progress_bar:
+            images = images.to(device)
+            captions = list(captions)
+            optimizer.zero_grad()
+            
+            try:
+                pred_captions_ids = model(images)
+                target_caption_ids = tokenize_captions(captions, tokenizer).to(device)
+                pred_embeddings = get_embeddings(pred_captions_ids, gpt_model)
+                target_embeddings = get_embeddings(target_caption_ids, gpt_model)
+                loss = cosine_similarity_loss(pred_embeddings, target_embeddings)
+                
+                if not loss.requires_grad:
+                    raise RuntimeError("Loss does not require gradients")
+                
+                loss.backward()
+                optimizer.step()
+                
+                total_loss += loss.item()
+                print(loss.item())
+                epoch_loss.append(loss.item())
+                progress_bar.set_postfix({'loss': loss.item()})
+                
+                # Log to W&B
+               # wandb.log({'loss': loss.item()})
+                
+            except RuntimeError as e:
+                print(f"An error occurred: {e}")
+                raise
+        
+        average_loss = total_loss / len(dataloader)
+        loss_history.append({'epoch': epoch + 1, 'loss': epoch_loss, 'average_loss': average_loss})
+        
+        tqdm.write(f'Epoch {epoch + 1}, Average Loss: {average_loss}')
+        
+        # Log average loss to W&B
+        #wandb.log({'average_loss': average_loss})
+        
+        with open('loss_history.json', 'w') as f:
+            json.dump(loss_history, f, indent=4)
+    
+    # Save model and finish W&B run
+    torch.save(model.state_dict(), 'model_epoch.pth')
+   # wandb.save('model_epoch.pth')
+   # wandb.finish()

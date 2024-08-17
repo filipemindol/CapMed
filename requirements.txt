@@ -1,0 +1,10 @@
+pandas==2.0.3
+Pillow==10.0.0
+numpy==1.24.2
+tqdm==4.65.0
+transformers==4.33.1
+timm
+torch==2.0.1
+torchvision==0.15.2
+nltk==3.8.1
+pycocoevalcap==1.2

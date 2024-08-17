@@ -1,0 +1,141 @@
+
+#without attention
+
+
+class MappingNetwork(nn.Module):
+    """This is a network that will map the feature images to input tokens for LLM
+        The network will create a prefix which is vector of tokens ids of length seq_len. 
+    Args:
+        input_size (integer): corresponds to the embeding size of image encoder CLS token
+        hidden_size (integer): dimension of hidden size of network
+        vocab_size (integer): this is dimention of vocaabulary embeding/token embeding 
+                                of language model
+        seq_len (integer): this is the length of tokens used as prefix to generate caption
+        x (tensor): input image features size (batch_size, embeding_size)
+    """
+    
+    def __init__(self, input_size, hidden_size, vocab_size=50257, seq_len=20):
+        super(MappingNetwork, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.bn1 = nn.BatchNorm1d(hidden_size)  # Adding Batch Normalization
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.bn2 = nn.BatchNorm1d(hidden_size)
+        self.fc3 = nn.Linear(hidden_size, vocab_size)
+        self.seq_len = seq_len
+        
+    def forward(self, x):
+        x = F.relu(self.bn1(self.fc1(x)))  # Applying BN after first linear layer
+        x = F.relu(self.bn2(self.fc2(x)))  # Applying BN after second linear layer
+        logits = self.fc3(x)  # Final linear layer for logits
+        
+        # Applying temperature scaling for better sampling diversity
+        temperature = 1.0
+        logits /= temperature
+        
+        # Apply top-k sampling to get the most probable tokens 
+        _, top_indices = torch.topk(logits, self.seq_len, dim=-1)  # (batch_size, seq_len)
+        
+        return top_indices  # (batch_size, seq_len)
+
+
+
+
+
+#with attention
+
+
+class MappingNetwork(nn.Module):
+    """
+    This network maps image features to input tokens for the LLM.
+    The network creates a prefix which is a vector of token ids of length seq_len.
+    
+    Args:
+        input_size (int): Embedding size of image encoder CLS token.
+        hidden_size (int): Dimension of hidden size of network.
+        vocab_size (int): Dimension of vocabulary embedding/token embedding of the language model.
+        seq_len (int): Length of tokens used as prefix to generate caption.
+    """
+    def __init__(self, input_size, hidden_size, vocab_size=50257, seq_len=20, dropout_prob=0.3):
+        super(MappingNetwork, self).__init__()
+        self.seq_len = seq_len
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.bn1 = nn.BatchNorm1d(hidden_size)
+        self.dropout1 = nn.Dropout(dropout_prob)
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.bn2 = nn.BatchNorm1d(hidden_size)
+        self.dropout2 = nn.Dropout(dropout_prob)
+        self.fc3 = nn.Linear(hidden_size, vocab_size)
+        
+        # Transformer encoder for attention
+        self.transformer_encoder = nn.TransformerEncoder(
+            nn.TransformerEncoderLayer(d_model=hidden_size, nhead=8),
+            num_layers=6
+        )
+
+    def forward(self, x):
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = self.dropout1(x)
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = self.dropout2(x)
+        
+        # Add a dimension for the transformer encoder (sequence length of 1 in this case)
+        x = x.unsqueeze(1)  # (batch_size, 1, hidden_size)
+        x = self.transformer_encoder(x)  # (batch_size, 1, hidden_size)
+        x = x.squeeze(1)  # Back to (batch_size, hidden_size)
+        
+        logits = self.fc3(x)
+        
+        # Temperature scaling
+        temperature = 1.0
+        logits /= temperature
+        
+        # Apply top-k sampling to get the most probable tokens 
+        _, top_indices = torch.topk(logits, self.seq_len, dim=-1)  # (batch_size, seq_len)
+        
+        return top_indices  # (batch_size, seq_len)
+
+
+
+without attention
+
+
+class MappingNetwork(nn.Module):
+    """This is a network that will map the feature images to input tokens for LLM
+        The network will create a prefix which is vector of tokens ids of length seq_len. 
+    Args:
+        input_size (integer): corresponds to the embeding size of image encoder CLS token
+        hidden_size (integer): dimension of hidden size of network
+        vocab_size (integer): this is dimention of vocaabulary embeding/token embeding 
+                                of language model
+        seq_len (integer): this is the length of tokens used as prefix to generate caption
+        x (tensor): input image features size (batch_size, embeding_size)
+    """
+    
+    def __init__(self, input_size, hidden_size, vocab_size=50257, seq_len=20):
+        super(MappingNetwork, self).__init__()
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.bn1 = nn.BatchNorm1d(hidden_size)  # Adding Batch Normalization
+        self.fc2 = nn.Linear(hidden_size, hidden_size)
+        self.bn2 = nn.BatchNorm1d(hidden_size)
+        self.fc3 = nn.Linear(hidden_size, vocab_size)
+        self.seq_len = seq_len
+        
+    def forward(self, x):
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        logits = self.fc3(x)
+        
+        # Temperature scaling
+        temperature = 1.0
+        logits /= temperature
+        
+        # Convert logits to probabilities
+        probabilities = F.softmax(logits, dim=-1)
+        
+        # Sample tokens from the probabilities
+        _, top_indices = torch.topk(probabilities, self.seq_len, dim=-1)
+        
+        return top_indices
+
+
+
